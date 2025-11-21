@@ -1,0 +1,1120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Spending Tracker — Cloud Edition</title>
+  <!-- Chart.js for data visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* Custom Dark Theme Styling */
+    :root{--accent:#06b6d4;--bg:#071029;--card:#0b1220;--muted:#9bdedd}
+    body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;background:#050718;color:#e6eef8}
+    header{background:linear-gradient(90deg,#071029,#041022);color:#fff;padding:18px 12px;font-size:22px;text-align:center;border-bottom:3px solid var(--accent)}
+    .wrap{max-width:1100px;margin:18px auto;padding:18px;background:linear-gradient(180deg,#061025,#041021);border-radius:12px; min-height: 80vh;}
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:18px}
+    @media(max-width:980px){.grid{grid-template-columns:1fr}}
+    h2{color:var(--accent);margin:12px 0}
+    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+    /* Updated styling for inputs and select elements */
+    input,select,button,textarea{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:1px solid rgba(255,255,255,.05);background:var(--card);color:#e6eef8; box-sizing: border-box;}
+    /* Specific styling for month/date input to fix contrast issues */
+    input[type="month"], input[type="date"] {
+        appearance: none; /* Remove default styling */
+        -webkit-appearance: none;
+        cursor: pointer;
+    }
+    button{background:var(--accent);color:#021124;border:none;cursor:pointer;font-weight: bold; transition: background-color 0.2s;}
+    button:hover{background: #0e7490;}
+    button:disabled { background: #4b5563; cursor: not-allowed; }
+    .panel{background:linear-gradient(180deg,rgba(255,255,255,.01),rgba(255,255,255,.008));padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,.03); margin-bottom: 18px;}
+    .list-item{display:flex;gap:8px;justify-content:space-between;align-items:center;background:linear-gradient(90deg,#071029,#07182a);padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.03);margin:8px 0; font-size: 14px;}
+    .small{font-size:13px;color:#9bdedd}
+    .muted{color:#9bdedd;font-size:13px}
+    /* Action Buttons in List */
+    .list-actions { display: flex; gap: 8px; }
+    .btn-edit{background:#fbbf24;color:#0b1220;padding:6px 10px;border-radius:8px;border:none;cursor:pointer; font-weight: normal; transition: background-color 0.2s; font-size: 13px;}
+    .btn-edit:hover{background:#d97706;}
+    .btn-delete{background:#dc2626;color:white;padding:6px 10px;border-radius:8px;border:none;cursor:pointer; font-weight: normal; transition: background-color 0.2s; font-size: 13px;}
+    .btn-delete:hover{background:#b91c1c;}
+    .budget-item { padding: 4px 0; border-top: 1px dashed rgba(255,255,255,0.05); }
+
+    /* --- NEW: Month Selection Layout --- */
+    .month-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+    }
+    .month-actions button {
+        flex: 1;
+        margin: 0; /* Remove default button margin */
+    }
+
+    /* --- MODAL STYLES (existing) --- */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+    .modal-content {
+        background: var(--bg);
+        padding: 24px;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 450px;
+        border: 2px solid var(--accent);
+        box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+    }
+    .modal-content h3 {
+        color: var(--accent);
+        margin-top: 0;
+        border-bottom: 1px solid rgba(6, 182, 212, 0.3);
+        padding-bottom: 8px;
+        margin-bottom: 16px;
+    }
+    .modal-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+    }
+    .modal-actions button {
+        flex: 1;
+    }
+    .btn-cancel {
+        background: #4b5563 !important;
+        color: white;
+    }
+    /* --- NEW: Confirmation Modal Specifics --- */
+    .modal-warning {
+        color: #f87171;
+        margin-bottom: 15px;
+        font-weight: 500;
+    }
+    .btn-confirm-delete {
+        background: #dc2626 !important;
+    }
+
+    /* --- END MODAL STYLES --- */
+    
+    /* --- NEW: TOAST NOTIFICATION STYLES --- */
+    .toast-notification {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--accent);
+        color: var(--bg);
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-weight: bold;
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out;
+        z-index: 2000;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .toast-success { background: #34d399; color: #071029; }
+    .toast-error { background: #dc2626; color: white; }
+    /* --- END TOAST NOTIFICATION STYLES --- */
+
+    canvas{background:transparent;border-radius:8px;margin-top:8px}
+    #pieChart{height:360px !important}
+    #fixedList, #expenseList {
+      max-height: 250px;
+      overflow-y: auto;
+      padding-right: 5px;
+    }
+    #fixedList::-webkit-scrollbar, #expenseList::-webkit-scrollbar, #budgetList::-webkit-scrollbar {
+      width: 8px;
+    }
+    #fixedList::-webkit-scrollbar-thumb, #expenseList::-webkit-scrollbar-thumb, #budgetList::-webkit-scrollbar-thumb {
+      background: rgba(155, 222, 221, 0.3);
+      border-radius: 4px;
+    }
+    #fixedList::-webkit-scrollbar-thumb:hover, #expenseList::-webkit-scrollbar-thumb:hover, #budgetList::-webkit-scrollbar-thumb:hover {
+      background: rgba(155, 222, 221, 0.5);
+    }
+    .user-id {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 10px;
+      color: #7b8a9d;
+    }
+    .budget-status {
+        font-weight: bold;
+    }
+    .budget-ok { color: #34d399; }
+    .budget-warning { color: #fbbf24; }
+    .budget-over { color: #dc2626; }
+  </style>
+  
+  <!-- Firebase SDK Imports -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    
+// --- START: FIREBASE INTEGRATION CODE ---
+
+// 1. FIREBASE CONFIGURATION (KEYS PROVIDED BY USER)
+const firebaseConfig = {
+    apiKey: "AIzaSyC7-gWs4ySD3KuQKeeiXlzEgXVPbqrJzuY",
+    authDomain: "spending-tracker-b0c6c.firebaseapp.com",
+    projectId: "spending-tracker-b0c6c",
+    storageBucket: "spending-tracker-b0c6c.firebasestorage.app",
+    messagingSenderId: "928497350008",
+    appId: "1:928497350008:web:f2f5f2345996890585448d",
+    measurementId: "G-VCLZRL6TF6"
+};
+
+// Global Firebase Objects (Mandatory Canvas Variables Used)
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+let userId = null; 
+let currentMonthDocRef = null; 
+let unsubscribeMonth = null; // Defined here (Global)
+
+// --- C. DYNAMIC CATEGORY MANAGEMENT ---
+const ALL_CATEGORIES = [
+    'Grocery', 'Travel', 'Shopping', 'Entertainment', 'Bills', 
+    'Investment', 'Housing', 'Car', 'Online Subscriptions', 'Loan', 
+    'Insurance', 'Other', 'Salary'
+];
+
+
+// Global State (Replaces localStorage)
+let store = {
+    fixedMaster: [], 
+    salary: { base: 0, startMonth: null, incrementPercent: 0, monthlyBusinessExpense: 0, annualOtherDeductions: 0 },
+    monthlyBudgets: {},
+    months: {} // Only holds the currently loaded month's data
+};
+
+// UI State
+let currentMonth = '';
+let pieChartInstance = null;
+let currentEditMonth = ''; 
+
+// --- Core Data Path Definitions ---
+function getSalaryDocRef() {
+    return doc(db, `/artifacts/${appId}/users/${userId}/config/salary`);
+}
+function getBudgetsDocRef() {
+    return doc(db, `/artifacts/${appId}/users/${userId}/config/budgets`);
+}
+function getFixedMasterCollectionRef() {
+    return collection(db, `/artifacts/${appId}/users/${userId}/fixedMaster`);
+}
+function getMonthDocRef(month) {
+    return doc(db, `/artifacts/${appId}/users/${userId}/monthlyData/${month}`);
+}
+
+// --- NEW: Firestore Persistence Functions ---
+async function persistSalaryAndBudgets() {
+    if (!userId) return;
+    try {
+        const salaryData = {
+            base: store.salary.base,
+            startMonth: store.salary.startMonth,
+            incrementPercent: store.salary.incrementPercent,
+            monthlyBusinessExpense: store.salary.monthlyBusinessExpense,
+            annualOtherDeductions: store.salary.annualOtherDeductions
+        };
+        await setDoc(getSalaryDocRef(), salaryData, { merge: false });
+        await setDoc(getBudgetsDocRef(), { budgets: store.monthlyBudgets }, { merge: false });
+        showToast("Global settings saved to cloud.", 'success');
+    } catch (e) {
+        showToast("Error saving config data to cloud.", 'error');
+        console.error("Error saving config data: ", e);
+    }
+}
+
+async function persistCurrentMonthData() {
+    if (!currentMonthDocRef || !store.months[currentMonth]) return;
+    try {
+        const dataToSave = {
+            fixed: store.months[currentMonth].fixed || [],
+            expenses: store.months[currentMonth].expenses || []
+        };
+        await setDoc(currentMonthDocRef, dataToSave, { merge: false });
+    } catch (e) {
+        showToast("Error saving monthly data to cloud.", 'error');
+        console.error("Error saving monthly data: ", e);
+    }
+}
+
+// --- NEW: Initial Setup and Authentication ---
+async function startApp() {
+    try {
+        // Authenticate user (using the canvas token or anonymously)
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+            await signInAnonymously(auth);
+        }
+
+        // Set up listener for auth state changes
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                userId = user.uid;
+                document.getElementById('userIdDisplay').textContent = `CLOUD MODE | User: ${userId}`;
+                
+                // Load global config data
+                loadGlobalConfig(); 
+                
+                // 1. Set month picker to current month
+                const today = new Date();
+                const currentMonthISO = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}`;
+                
+                const monthPicker = document.getElementById('monthPicker');
+                if (!monthPicker.value) {
+                    monthPicker.value = currentMonthISO;
+                }
+                
+                // 2. Load the current month data immediately
+                loadMonth();
+            } else {
+                document.getElementById('userIdDisplay').textContent = "CLOUD FAILED | Please reload.";
+                showToast("Authentication failed. Cloud data access denied.", 'error');
+            }
+        });
+    } catch (error) {
+        document.getElementById('userIdDisplay').textContent = "CLOUD FAILED | Check Console.";
+        showToast("FATAL: Cannot connect to cloud.", 'error');
+        console.error("Firebase Auth Error: ", error);
+    }
+}
+
+// --- NEW: Global Config Loader (Salary/Budgets & Fixed Master) ---
+async function loadGlobalConfig() {
+    if (!userId) return;
+    try {
+        // --- 1. Load Salary/Deductions (Once) ---
+        const salarySnap = await getDoc(getSalaryDocRef());
+        if (salarySnap.exists()) {
+            // Merge loaded data into local store object
+            const loadedSalary = salarySnap.data();
+            store.salary.base = loadedSalary.base || 0;
+            store.salary.startMonth = loadedSalary.startMonth || null;
+            store.salary.incrementPercent = loadedSalary.incrementPercent || 0;
+            store.salary.monthlyBusinessExpense = loadedSalary.monthlyBusinessExpense || 0;
+            store.salary.annualOtherDeductions = loadedSalary.annualOtherDeductions || 0;
+        }
+
+        // --- 2. Load Budgets (Once) ---
+        const budgetsSnap = await getDoc(getBudgetsDocRef());
+        if (budgetsSnap.exists()) {
+            store.monthlyBudgets = budgetsSnap.data().budgets || {};
+        }
+
+        // --- 3. Load Fixed Master List (Real-time listener) ---
+        onSnapshot(getFixedMasterCollectionRef(), (snapshot) => {
+            store.fixedMaster = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // Re-render only if a month is already loaded
+            if (currentMonth) {
+                applyFixedToMonth(currentMonth); // Re-run application logic
+                render();
+            }
+        }, (error) => {
+            showToast("Error loading fixed list in real-time.", 'error');
+            console.error("Fixed Master Snapshot Error: ", error);
+        });
+
+        // Update UI inputs with loaded data
+        renderSalaryInputs();
+        
+    } catch (e) {
+        showToast("Error loading global config.", 'error');
+        console.error("Error loading global config: ", e);
+    }
+}
+
+// --- Helper Functions ---
+function monthsBetween(a,b){
+  const out=[];
+  let [ay,am]=a.split('-').map(Number);
+  let [by,bm]=b.split('-').map(Number);
+  let y=ay,m=am;
+  while(y<by||(y===by&&m<=bm)){
+    out.push(`${y.toString().padStart(4,'0')}-${m.toString().padStart(2, '0')}`);
+    m++; if(m>12){m=1;y++;}
+  }
+  return out;
+}
+function ensureSalaryAnchor(month){ if(!store.salary.startMonth) store.salary.startMonth = month; }
+function annualSalaryFor(month){
+  const base=Number(store.salary.base)||0;
+  if(!store.salary.startMonth) return base;
+  const [sy,sm]=store.salary.startMonth.split('-').map(Number);
+  const [y,mo]=month.split('-').map(Number);
+  let years=y-sy; if(mo<sm) years--;
+  if(years<0) years=0;
+  let sal=base;
+  const inc=(Number(store.salary.incrementPercent)||0)/100;
+  for(let i=0;i<years;i++) sal=Math.round(sal*(1+inc));
+  return sal;
+}
+function computeTax(annualIncome){
+  const slabs=[[300000,0],[600000,0.05],[900000,0.10],[1200000,0.15],[1500000,0.20],[Infinity,0.30]];
+  let tax=0, prev=0;
+  let remainingIncome = annualIncome;
+  for(const [limit,rate] of slabs){
+    if(remainingIncome<=prev) break;
+    const slabAmount = limit - prev;
+    const taxed=Math.min(remainingIncome-prev,slabAmount);
+    if(taxed>0) tax+=taxed*rate;
+    prev=limit;
+    if (annualIncome <= limit) break;
+  }
+  tax = tax * 1.04;
+  return Math.round(tax);
+}
+
+// Renders loaded salary data into the input fields
+function renderSalaryInputs() {
+    document.getElementById('annualSalary').value = store.salary.base || '';
+    document.getElementById('salaryIncrement').value = store.salary.incrementPercent || '';
+    document.getElementById('monthlyBusinessExpense').value = store.salary.monthlyBusinessExpense || '';
+    document.getElementById('annualOtherDeductions').value = store.salary.annualOtherDeductions || '';
+}
+
+// --- Action Functions (Refactored for Firestore) ---
+
+function loadMonth(){
+  const m=document.getElementById('monthPicker').value;
+  if(!m) return showToast('Choose a month', 'error');
+  if (!userId) return showToast('App not connected to the cloud.', 'error');
+
+  // Stop previous listener if active
+  if (unsubscribeMonth) {
+    unsubscribeMonth();
+  }
+  
+  currentMonth = m;
+  currentMonthDocRef = getMonthDocRef(m);
+  
+  ensureSalaryAnchor(m);
+  
+  // Start new listener for the current month
+  unsubscribeMonth = onSnapshot(currentMonthDocRef, (docSnap) => {
+    if (docSnap.exists()) {
+        store.months[m] = docSnap.data();
+    } else {
+        // Document doesn't exist, initialize with fixed master data
+        store.months[m] = { fixed: [], expenses: [] };
+        applyFixedToMonth(m);
+        persistCurrentMonthData(); // Create the document in Firestore
+    }
+    
+    // Ensure fixed items are applied after loading (for master list updates)
+    applyFixedToMonth(m);
+    
+    render();
+    showToast(`Data for ${m} loaded and synchronized.`, 'success');
+  }, (error) => {
+      showToast("Error loading monthly data.", 'error');
+      console.error("Monthly Snapshot Error: ", error);
+  });
+}
+
+// Updates monthly fixed list based on master list validity
+function applyFixedToMonth(m){
+  if (!store.months[m]) store.months[m] = { fixed: [], expenses: [] };
+
+  const currentFixedIds = new Set((store.months[m].fixed || []).map(f => f.id));
+  let newFixed = [];
+
+  for(const f of store.fixedMaster){
+    // 1. Check if the master item applies to the current month
+    if(f.start && f.end && f.start<=m && m<=f.end){
+      // 2. Add the item if it's not already present or if it needs update (we copy from master)
+      newFixed.push({...f});
+    }
+  }
+
+  store.months[m].fixed = newFixed;
+}
+
+
+// Clears month data by using the NEW Confirmation Modal
+function clearMonth(){
+  if(!currentMonth) return;
+  openConfirmModal('clearMonth', null, { 
+      title: "Clear All Monthly Data", 
+      message: `Are you sure you want to delete ALL fixed and variable transactions for ${currentMonth}? This action is permanent.`,
+      confirmText: `Yes, Clear ${currentMonth}` 
+  });
+}
+
+// Saves salary and global config to Firestore
+async function saveSalary(){
+  store.salary.base=Number(document.getElementById('annualSalary').value)||0;
+  store.salary.incrementPercent=Number(document.getElementById('salaryIncrement').value)||0;
+  store.salary.monthlyBusinessExpense=Number(document.getElementById('monthlyBusinessExpense').value)||0;
+  store.salary.annualOtherDeductions=Number(document.getElementById('annualOtherDeductions').value)||0;
+  
+  await persistSalaryAndBudgets();
+
+  if(currentMonth) render();
+}
+
+// Adds fixed master item to the Firestore collection
+async function addFixed(){
+  if(!currentMonth) return showToast('Load a month first', 'error');
+  const name = document.getElementById('fixedName').value.trim();
+  const amount = Number(document.getElementById('fixedAmt').value)||0;
+  const category = document.getElementById('fixedCat').value;
+  const start = document.getElementById('fixedStart').value;
+  const end = document.getElementById('fixedEnd').value;
+  
+  if(!name||!amount||!start||!end) return showToast('Fill all fields', 'error');
+
+  const obj={
+    name,
+    amount,
+    category,
+    start,
+    end
+  };
+  
+  // Uses addDoc to save to fixedMaster Collection
+  try {
+      await addDoc(getFixedMasterCollectionRef(), obj);
+  } catch(e) {
+      showToast('Error adding fixed expense to cloud.', 'error');
+      console.error("Error adding fixed expense: ", e);
+      return;
+  }
+
+  document.getElementById('fixedName').value = '';
+  document.getElementById('fixedAmt').value = '';
+  document.getElementById('fixedStart').value = '';
+  document.getElementById('fixedEnd').value = '';
+  
+  // Real-time listener handles the render() call automatically
+  showToast(`Fixed expense "${name}" added successfully.`, 'success');
+}
+
+// Adds expense to the current month's Firestore document
+async function addExpense(){
+  if(!currentMonth) return showToast('Load a month first', 'error');
+  const n=document.getElementById('expName').value.trim();
+  const d=document.getElementById('expDate').value; // Date input
+  const a=Number(document.getElementById('expAmt').value)||0;
+  const c=document.getElementById('expCat').value;
+  if(!n||!a||!d) return showToast('Enter name, date & amount', 'error');
+  
+  if (d.substring(0, 7) !== currentMonth) {
+      if (!window.confirm(`Warning: The date selected (${d}) is not in the current month (${currentMonth}). Continue anyway?`)) {
+          // Note: Kept window.confirm here for date-mismatch validation, but moved core deletion to modal
+          return;
+      }
+  }
+  
+  // Add item to the local state array
+  const newExpense = {id: 'ex_'+Date.now(), name:n, date:d, amount:a, category:c};
+  store.months[currentMonth].expenses = store.months[currentMonth].expenses || [];
+  store.months[currentMonth].expenses.push(newExpense); 
+  
+  // Save the entire month document back to Firestore
+  await persistCurrentMonthData();
+
+  document.getElementById('expName').value = '';
+  document.getElementById('expDate').value = new Date().toISOString().substring(0, 10); // Reset date to today
+  document.getElementById('expAmt').value = '';
+  
+  showToast(`Expense "${n}" logged successfully.`, 'success');
+}
+
+// Deletes item from the current month's Firestore document using the NEW Confirmation Modal
+function deleteItem(month, id, listType){
+    const item = store.months[month][listType].find(x => x.id === id);
+    if (!item) return;
+
+    let message, confirmText;
+    if (listType === 'fixed') {
+        message = `This will permanently delete the master fixed item "${item.name}". It will be removed from ALL months where it was applied.`;
+        confirmText = `Delete Master Fixed Item`;
+    } else {
+        message = `This will permanently delete the variable expense "${item.name}" from ${currentMonth}.`;
+        confirmText = `Delete Expense`;
+    }
+
+    openConfirmModal('deleteItem', id, { 
+        title: `Delete ${item.name}`,
+        message: message,
+        listType: listType,
+        month: month,
+        confirmText: confirmText
+    });
+}
+
+
+// Budgeting Logic - Saves budget to the global budgets document
+async function setBudget(){
+  const cat = document.getElementById('budgetCat').value;
+  const amt = Number(document.getElementById('budgetAmt').value) || 0;
+  
+  if (!cat || amt < 0) return showToast('Please select a category and enter a valid budget.', 'error');
+
+  store.monthlyBudgets[cat] = amt;
+  
+  await persistSalaryAndBudgets(); // Saves global budgets document
+  
+  document.getElementById('budgetAmt').value = '';
+  render();
+  showToast(`Budget for ${cat} set to ₹${amt.toLocaleString('en-IN')}`, 'success');
+}
+
+// NEW: Delete Budget Function using the Confirmation Modal
+function deleteBudget(category) {
+    openConfirmModal('deleteBudget', category, { 
+        title: "Remove Budget", 
+        message: `Are you sure you want to remove the budget limit for category: "${category}"?`,
+        confirmText: "Yes, Remove Budget"
+    });
+}
+window.deleteBudget = deleteBudget;
+
+
+// --- B. CONFIRMATION MODAL LOGIC ---
+
+let pendingAction = null; // Stores data needed for the confirmed action
+
+function openConfirmModal(action, id, data) {
+    pendingAction = { action, id, ...data };
+    document.getElementById('confirmTitle').textContent = data.title;
+    document.getElementById('confirmMessage').textContent = data.message;
+    document.getElementById('btnConfirmAction').textContent = data.confirmText;
+    document.getElementById('confirmModal').style.display = 'flex';
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirmModal').style.display = 'none';
+    pendingAction = null;
+}
+
+async function handleConfirmAction() {
+    if (!pendingAction) return;
+    const { action, id, listType, month } = pendingAction;
+    closeConfirmModal();
+
+    if (action === 'clearMonth') {
+        // Confirmed clearing the whole month
+        deleteDoc(currentMonthDocRef)
+            .then(() => {
+                store.months[currentMonth] = { fixed: [], expenses: [] };
+                render();
+                showToast(`All data for ${currentMonth} cleared!`, 'success');
+            })
+            .catch(e => showToast("Error clearing month data from cloud.", 'error'));
+
+    } else if (action === 'deleteBudget') {
+        // Confirmed deleting a specific budget
+        delete store.monthlyBudgets[id];
+        await persistSalaryAndBudgets();
+        render();
+        showToast(`Budget for ${id} removed.`, 'error');
+
+    } else if (action === 'deleteItem') {
+        // Confirmed deleting an individual item
+        if (listType === 'fixed') {
+            await deleteDoc(doc(db, getFixedMasterCollectionRef().path, id))
+                .then(() => showToast('Master Fixed Item deleted.', 'error'))
+                .catch(e => showToast('Error deleting fixed item.', 'error'));
+        } else {
+            // Variable expense (delete from the current month's array)
+            store.months[month][listType]=store.months[month][listType].filter(x=>x.id!==id);
+            await persistCurrentMonthData();
+            showToast('Item deleted.', 'error');
+        }
+    }
+}
+window.handleConfirmAction = handleConfirmAction; // Expose to global scope for the button
+
+// --- EDITING LOGIC (Refactored for Firestore) ---
+
+function openEditModal(month, id, listType) {
+    currentEditMonth = month;
+    const list = store.months[month][listType];
+    const item = list.find(x => x.id === id);
+
+    if (!item) return showToast("Item not found!", 'error');
+
+    // --- C. DYNAMIC CATEGORY POPULATION IN EDIT MODAL ---
+    populateCategorySelects('editCat', item.category);
+
+    document.getElementById('editItemId').value = id;
+    document.getElementById('editListType').value = listType;
+    document.getElementById('editName').value = item.name;
+    document.getElementById('editAmt').value = item.amount;
+    document.getElementById('editCat').value = item.category;
+
+    const fixedEditFields = document.getElementById('fixedEditFields');
+    const editDateInput = document.getElementById('editDate');
+    const editDateLabel = document.getElementById('editDateLabel');
+
+    if (listType === 'fixed') {
+        fixedEditFields.style.display = 'block';
+        editDateInput.style.display = 'none';
+        editDateLabel.style.display = 'none';
+        document.getElementById('editStart').value = item.start || '';
+        document.getElementById('editEnd').value = item.end || '';
+    } else { // Variable Expense
+        fixedEditFields.style.display = 'none';
+        editDateInput.style.display = 'block';
+        editDateLabel.style.display = 'block';
+        editDateInput.value = item.date || ''; 
+    }
+
+    document.getElementById('editModal').style.display = 'flex';
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').style.display = 'none';
+    currentEditMonth = '';
+}
+
+async function saveEditedItem() {
+    const id = document.getElementById('editItemId').value;
+    const listType = document.getElementById('editListType').value;
+    const month = currentEditMonth;
+
+    const newName = document.getElementById('editName').value.trim();
+    const newAmount = Number(document.getElementById('editAmt').value);
+    const newCategory = document.getElementById('editCat').value;
+
+    if (!newName || newAmount <= 0) {
+        return showToast("Name and Amount are required.", 'error');
+    }
+
+    if (listType === 'expenses') {
+        const monthList = store.months[month][listType];
+        const itemIndex = monthList.findIndex(x => x.id === id);
+
+        if (itemIndex > -1) {
+            monthList[itemIndex].name = newName;
+            monthList[itemIndex].amount = newAmount;
+            monthList[itemIndex].category = newCategory;
+            
+            const newDate = document.getElementById('editDate').value;
+            if (!newDate) return showToast("Date is required.", 'error');
+            
+            if (newDate.substring(0, 7) !== month) {
+                 if (!window.confirm(`Warning: Changing the date to ${newDate} moves this expense out of the current month (${month}). Continue?`)) {
+                    return;
+                }
+            }
+            monthList[itemIndex].date = newDate; 
+            await persistCurrentMonthData(); // Save updated expense list
+            showToast('Transaction updated successfully.', 'success');
+        } else {
+            showToast("Error: Item to edit was not found.", 'error');
+        }
+    }
+    
+    if (listType === 'fixed') {
+        const newStart = document.getElementById('editStart').value;
+        const newEnd = document.getElementById('editEnd').value;
+        if (!newStart || !newEnd) return showToast("Fixed items require start and end months.", 'error');
+
+        // Update the item in the fixed master collection
+        const fixedDocRef = doc(db, getFixedMasterCollectionRef().path, id);
+        await updateDoc(fixedDocRef, {
+            name: newName,
+            amount: newAmount,
+            category: newCategory,
+            start: newStart,
+            end: newEnd
+        })
+        .then(() => showToast('Fixed item updated successfully (Master Updated).', 'success'))
+        .catch(e => showToast('Error updating fixed item.', 'error'));
+        
+        // The onSnapshot listener for fixedMaster will handle the re-render
+    }
+    closeEditModal();
+}
+
+// Expose functions to global scope
+window.openEditModal = openEditModal;
+window.closeEditModal = closeEditModal;
+window.saveEditedItem = saveEditedItem;
+window.deleteItem = deleteItem;
+window.setBudget = setBudget; 
+
+// --- Rendering and Visualization ---
+
+// NEW: Toast Notification Function
+function showToast(message, type = 'default') {
+    const toast = document.getElementById('toastNotification');
+    if (!toast) return; 
+
+    toast.textContent = message;
+    toast.className = 'toast-notification'; // Reset classes
+    if (type === 'success') {
+        toast.classList.add('toast-success');
+    } else if (type === 'error') {
+        toast.classList.add('toast-error');
+    }
+
+    toast.style.opacity = '1';
+    
+    // Hide the toast after 3 seconds
+    setTimeout(() => {
+        toast.style.opacity = '0';
+    }, 3000);
+}
+
+// --- C. DYNAMIC CATEGORY POPULATION ---
+function populateCategorySelects(selectId, selectedValue = null) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    
+    // Clear existing options
+    select.innerHTML = ''; 
+
+    // Add options from the master list
+    ALL_CATEGORIES.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        if (category === selectedValue) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    });
+}
+
+
+function render(){
+  // --- Initialization: Populate dropdowns and inputs ---
+  populateCategorySelects('fixedCat');
+  populateCategorySelects('expCat');
+  populateCategorySelects('budgetCat');
+
+  renderSalaryInputs();
+
+  // Set default date to today for easy input
+  const today = new Date().toISOString().substring(0, 10);
+  document.getElementById('expDate').value = today;
+
+  if(!currentMonth){ 
+    document.getElementById('summaryPanel').innerHTML='<p class="muted">Load a month to view your financial summary.</p>'; 
+    document.getElementById('fixedList').innerHTML='';
+    document.getElementById('expenseList').innerHTML='';
+    document.getElementById('budgetList').innerHTML='<p class="muted">Budgets apply to all months.</p>';
+    if(pieChartInstance) pieChartInstance.destroy();
+    return; 
+  }
+  
+  const data=store.months[currentMonth];
+  const fixedDiv=document.getElementById('fixedList');
+  const expDiv=document.getElementById('expenseList');
+  const budgetDiv=document.getElementById('budgetList');
+  
+  // Render Fixed List with Edit/Delete
+  fixedDiv.innerHTML=(data.fixed || [])
+    .map(f => `<div class='list-item'>
+        <div>${f.name} <span class='small'>(${f.category})</span></div> 
+        — ₹${f.amount.toLocaleString('en-IN')}
+        <div class='list-actions'>
+            <button class='btn-edit' onclick="openEditModal('${currentMonth}','${f.id}','fixed')">Edit</button>
+            <button class='btn-delete' onclick="deleteItem('${currentMonth}','${f.id}','fixed')">Delete</button>
+        </div>
+    </div>`).join('');
+    
+  // Render Expense List with Date and Actions
+  expDiv.innerHTML=(data.expenses || [])
+    .sort((a, b) => new Date(b.date) - new Date(a.date)) // Sort newest first by date
+    .map(e => `<div class='list-item'>
+        <div>${e.name} <span class='small'>(${e.category}, ${e.date})</span></div> 
+        — ₹${e.amount.toLocaleString('en-IN')}
+        <div class='list-actions'>
+            <button class='btn-edit' onclick="openEditModal('${currentMonth}','${e.id}','expenses')">Edit</button>
+            <button class='btn-delete' onclick="deleteItem('${currentMonth}','${e.id}','expenses')">Delete</button>
+        </div>
+    </div>`).join('');
+    
+  // Render Budget List
+  const totalCategorySpending = {};
+  (data.fixed || []).forEach(f=>totalCategorySpending[f.category]=(totalCategorySpending[f.category]||0)+Number(f.amount||0));
+  (data.expenses || []).forEach(e=>totalCategorySpending[e.category]=(totalCategorySpending[e.category]||0)+Number(e.amount||0));
+
+  let budgetHtml = Object.keys(store.monthlyBudgets).map(cat => {
+    const budget = store.monthlyBudgets[cat];
+    const spent = totalCategorySpending[cat] || 0;
+    const remaining = budget - spent;
+    let statusClass = 'budget-ok';
+    let statusText = 'OK';
+
+    if (remaining < 0) {
+        statusClass = 'budget-over';
+        statusText = `OVER: ₹${Math.abs(remaining).toLocaleString('en-IN')}`;
+    } else if (remaining < budget * 0.25 && budget > 0) { // Warning if less than 25% remaining
+        statusClass = 'budget-warning';
+        statusText = `LOW: ₹${remaining.toLocaleString('en-IN')}`;
+    } else {
+        statusText = `REMAINING: ₹${remaining.toLocaleString('en-IN')}`;
+    }
+    
+    // Use deleteBudget function which now uses the modal
+    const deleteButton = `<button class="btn-delete" style="padding: 4px 8px; font-size: 11px; margin-left: 8px;" onclick="deleteBudget('${cat}')">X</button>`;
+
+    return `<div class="budget-item">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <strong>${cat}:</strong> 
+          <div style="text-align: right;">
+            <span style="font-size: 13px;">Budget ₹${budget.toLocaleString('en-IN')} / Spent ₹${spent.toLocaleString('en-IN')}</span>
+            ${deleteButton}
+          </div>
+        </div>
+        <div class="budget-status ${statusClass}">${statusText}</div>
+    </div>`;
+  }).join('');
+  
+  budgetDiv.innerHTML = budgetHtml || '<p class="muted">No budgets set. Use the form above to set one.</p>';
+    
+  renderSummary();
+  drawPie();
+}
+function renderSummary(){
+  if (!currentMonth) return;
+  const m = store.months[currentMonth];
+  const annual=annualSalaryFor(currentMonth);
+  // Use store.salary for deductions
+  const taxable=Math.max(0,annual-(Number(store.salary.annualOtherDeductions) + Number(store.salary.monthlyBusinessExpense)*12));
+  const totalTax=computeTax(taxable);
+  const monthlyTax=Math.round(totalTax/12);
+  const netMonthly=Math.round((annual/12)-monthlyTax);
+  const totalFixed=(m.fixed || []).reduce((s,x)=>s+Number(x.amount||0),0);
+  const totalVar=(m.expenses || []).reduce((s,x)=>s+Number(x.amount||0),0);
+  const totalSpend = totalFixed + totalVar;
+  const left=netMonthly-totalSpend;
+  
+  const remainingColor = left >= 0 ? 'color: #34d399;' : 'color: #ef4444;';
+
+  document.getElementById('summaryPanel').innerHTML = `
+    <div style="font-size: 14px; line-height: 1.8;">
+      <b>Annual Salary (Base):</b> ₹${annual.toLocaleString('en-IN')}<br>
+      <b>Taxable Income:</b> ₹${taxable.toLocaleString('en-IN')}<br>
+      <b>Estimated Annual Tax:</b> ₹${totalTax.toLocaleString('en-IN')}<br>
+      ---
+      <b>Net Monthly Income:</b> <span style="color: #34d399; font-weight: bold;">₹${netMonthly.toLocaleString('en-IN')}</span><br>
+      <b>Monthly Tax Deduction:</b> ₹${monthlyTax.toLocaleString('en-IN')}<br>
+      ---
+      <b>Fixed Spendings:</b> ₹${totalFixed.toLocaleString('en-IN')}<br>
+      <b>Variable Spendings:</b> ₹${totalVar.toLocaleString('en-IN')}<br>
+      <b>Total Spend:</b> ₹${totalSpend.toLocaleString('en-IN')}<br>
+      ---
+      <b>Remaining for Savings:</b> <span style="${remainingColor} font-size: 1.2em; font-weight: bold;">₹${left.toLocaleString('en-IN')}</span>
+    </div>
+  `;
+}
+function drawPie(){
+  const m=store.months[currentMonth];
+  const cats={};
+  (m.fixed || []).forEach(f=>cats[f.category]=(cats[f.category]||0)+Number(f.amount||0));
+  (m.expenses || []).forEach(e=>cats[e.category]=(cats[e.category]||0)+Number(e.amount||0));
+  
+  for (const key in cats) {
+      if (cats[key] === 0) delete cats[key];
+  }
+  
+  const ctx=document.getElementById('pieChart').getContext('2d');
+  if(pieChartInstance) pieChartInstance.destroy();
+  
+  const backgroundColors = ['#06b6d4', '#475569', '#f87171', '#fbbf24', '#34d399', '#6366f1', '#f472b6', '#a78bfa', '#22c3e3', '#9ca3af'];
+  
+  pieChartInstance=new Chart(ctx,{type:'pie',data:{labels:Object.keys(cats),datasets:[{data:Object.values(cats),backgroundColor: backgroundColors, borderColor: '#0b1220', borderWidth: 2}]},
+    options:{
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins:{
+        legend:{position:'right',labels:{color:'#e6eef8',font:{size:12}}},
+        tooltip:{callbacks:{label:function(context){let label=context.label||'';if(label)label+=': ';if(context.parsed!==null)label+='₹'+context.parsed.toLocaleString('en-IN');return label;}}}
+      }
+    }
+  });
+}
+
+
+// Expose functions to global scope
+window.openEditModal = openEditModal;
+window.closeEditModal = closeEditModal;
+window.saveEditedItem = saveEditedItem;
+window.deleteItem = deleteItem;
+window.setBudget = setBudget; 
+
+// --- Event Listeners ---
+document.getElementById('btnLoad').onclick=loadMonth;
+document.getElementById('btnClear').onclick=clearMonth;
+document.getElementById('btnSaveSalary').onclick = saveSalary;
+document.getElementById('btnAddFixed').onclick = addFixed;
+document.getElementById('btnAddExpense').onclick = addExpense;
+document.getElementById('btnSaveEdit').onclick = saveEditedItem;
+document.getElementById('btnSetBudget').onclick = setBudget; 
+
+// Initial App Start
+window.onload = startApp;
+</script>
+</head>
+<body>
+<header>Spending Tracker</header>
+<div class="wrap">
+  <div class="user-id" id="userIdDisplay">Connecting to Cloud...</div>
+  <div class="grid">
+
+    <div>
+      <h2>Choose Month</h2>
+      <div class="panel">
+        <label>Select month to view / edit</label>
+        <input type="month" id="monthPicker">
+        <div class="month-actions">
+          <button id="btnLoad">Load Month</button>
+          <button id="btnClear">Clear Month</button>
+        </div>
+      </div>
+
+      <h2>Salary & Tax</h2>
+      <div class="panel">
+        <label>Annual Salary (₹)</label>
+        <input id="annualSalary" type="number" placeholder="e.g. 1200000">
+        <label>Business Expense (₹ / month)</label>
+        <input id="monthlyBusinessExpense" type="number" placeholder="e.g. 20000">
+        <label>Other Deductions (₹ / year)</label>
+        <input id="annualOtherDeductions" type="number" placeholder="e.g. 50000">
+        <label>Annual Increment (%)</label>
+        <input id="salaryIncrement" type="number" placeholder="e.g. 5">
+        <div style="margin-top:8px"><button id="btnSaveSalary">Save Salary & Config</button></div>
+      </div>
+      
+      <!-- NEW BUDGETING SECTION -->
+      <h2>Set Category Budget</h2>
+      <div class="panel">
+        <label>Category</label>
+        <select id="budgetCat"><!-- Categories populated by JS --></select>
+        <label>Monthly Budget Limit (₹)</label>
+        <input id="budgetAmt" type="number" placeholder="e.g. 10000">
+        <div style="margin-top:10px"><button id="btnSetBudget">Set Budget</button></div>
+        <div id="budgetList" style="margin-top:12px"></div>
+      </div>
+      <!-- END NEW BUDGETING SECTION -->
+
+      <h2>Fixed Spendings</h2>
+      <div class="panel">
+        <label>Name</label>
+        <input id="fixedName" placeholder="e.g. Rent">
+        <label>Amount (monthly ₹)</label>
+        <input id="fixedAmt" type="number" placeholder="e.g. 25000">
+        <label>Category</label>
+        <select id="fixedCat"><!-- Categories populated by JS --></select>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1">
+            <label>Start month</label>
+            <input id="fixedStart" type="month">
+          </div>
+          <div style="flex:1">
+            <label>End month</label>
+            <input id="fixedEnd" type="month">
+          </div>
+        </div>
+        <div style="margin-top:10px"><button id="btnAddFixed">Add Fixed (auto-apply)</button></div>
+        <div id="fixedList" style="margin-top:12px"></div>
+      </div>
+
+      <h2>Add Expense</h2>
+      <div class="panel">
+        <label>Expense name</label>
+        <input id="expName" placeholder="Grocery">
+        <label>Amount (₹)</label>
+        <input id="expAmt" type="number" placeholder="e.g. 500">
+        <label>Date</label>
+        <input id="expDate" type="date">
+        <label>Category</label>
+        <select id="expCat"><!-- Categories populated by JS --></select>
+        <div style="margin-top:10px"><button id="btnAddExpense">Add Expense to Month</button></div>
+        <div id="expenseList" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Summary</h2>
+      <div id="summaryPanel" class="panel"></div>
+
+      <h2>Pie Chart</h2>
+      <div class="panel">
+        <canvas id="pieChart" width="420" height="360"></canvas>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- --- MODAL FOR EDITING TRANSACTIONS --- -->
+<div id="editModal" class="modal-overlay" onclick="closeEditModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <h3>Edit Transaction</h3>
+        <input type="hidden" id="editItemId">
+        <input type="hidden" id="editListType">
+
+        <label>Name</label>
+        <input id="editName" type="text">
+        
+        <label>Amount (₹)</label>
+        <input id="editAmt" type="number">
+        
+        <label>Category</label>
+        <select id="editCat"><!-- Categories populated by JS --></select>
+        
+        <label id="editDateLabel">Date</label>
+        <input id="editDate" type="date">
+
+        <div id="fixedEditFields" style="display:none; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <label>Start month</label>
+            <input id="editStart" type="month">
+            <label>End month</label>
+            <input id="editEnd" type="month">
+        </div>
+
+        <div class="modal-actions">
+            <button id="btnSaveEdit">Save Changes</button>
+            <button type="button" class="btn-cancel" onclick="closeEditModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+<!-- --- END EDIT MODAL --- -->
+
+<!-- --- NEW CONFIRMATION MODAL FOR DELETION --- -->
+<div id="confirmModal" class="modal-overlay" onclick="closeConfirmModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <h3 id="confirmTitle">Confirm Action</h3>
+        <p class="modal-warning" id="confirmMessage">Are you sure you want to proceed?</p>
+
+        <div class="modal-actions">
+            <button id="btnConfirmAction" class="btn-confirm-delete" onclick="handleConfirmAction()">Yes, Proceed</button>
+            <button type="button" class="btn-cancel" onclick="closeConfirmModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+<!-- --- END CONFIRMATION MODAL --- -->
+
+
+<!-- --- TOAST NOTIFICATION ELEMENT --- -->
+<div id="toastNotification" class="toast-notification"></div>
+<!-- --- END TOAST --- -->
+
+<script>
+// Attach event listeners for the newly added HTML elements that were causing the error.
+document.getElementById('btnSaveEdit').onclick = saveEditedItem;
+document.getElementById('btnSetBudget').onclick = setBudget;
+</script>
+</body>
+</html>
